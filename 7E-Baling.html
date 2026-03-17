@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7E-Baling Store POS</title>
+<style>
+/* OFFLINE SAFE FONTS */
+*{
+    margin:0; padding:0; box-sizing:border-box; scroll-behavior: smooth;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+body{
+    background: linear-gradient(-45deg,#ff6b6b,#feca57,#ff9ff3,#48dbfb,#54a0ff);
+    background-size: 400% 400%;
+    animation: gradientBG 15s ease infinite;
+    min-height:100vh; padding:15px;
+}
+@keyframes gradientBG{ 0%{background-position:0% 50%;} 50%{background-position:100% 50%;} 100%{background-position:0% 50%;} }
+
+.container{
+    max-width:1550px; margin:0 auto; display:grid; grid-template-columns: 1fr 400px; gap:20px;
+    background:rgba(255,255,255,0.9); backdrop-filter:blur(20px); border-radius:25px; padding:25px; box-shadow:0 20px 50px rgba(0,0,0,0.1);
+}
+
+@media (max-width: 900px) { .container { grid-template-columns: 1fr; } .side-panel { order: -1; } }
+
+.header{
+    background: linear-gradient(135deg,#ff6b6b,#ee5a52); color:white; padding:25px; border-radius:20px; text-align:center; position: relative; margin-bottom: 20px;
+}
+.admin-lock-btn { position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.2); border: 1px solid white; color: white; padding: 5px 12px; border-radius: 10px; cursor: pointer; font-size: 11px; }
+
+.section-card{ background:white; padding:20px; border-radius:20px; margin-bottom:20px; border: 1px solid #eee; }
+
+/* ADMIN NAV DOCK */
+#adminNavDock {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: white; padding: 10px 25px; border-radius: 50px; display: none; gap: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); z-index: 10000;
+}
+.nav-btn { background:#ff6b6b; color:white; border:none; padding:8px 15px; border-radius:20px; cursor:pointer; font-weight:bold; font-size:12px; }
+
+.modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 20000; justify-content: center; align-items: center; }
+.login-box { background: white; padding: 30px; border-radius: 20px; text-align: center; width: 300px; }
+
+#adminSection, #historySection { display: none; }
+.form-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:15px; }
+input{ width:100%; padding:12px; border:1px solid #ddd; border-radius:12px; outline:none; font-size: 14px;}
+.btn-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(100px,1fr)); gap:10px; }
+.btn{ padding:12px; border:none; border-radius:12px; font-weight:bold; cursor:pointer; text-transform:uppercase; transition: 0.2s; }
+.btn-success{ background:#28a745; color:white; }
+.btn-warning{ background:#ffc107; color:white; }
+.btn-danger{ background:#dc3545; color:white; }
+.btn-info { background:#17a2b8; color:white; }
+
+.product-item{ display:grid; grid-template-columns:2fr 1fr 1fr 100px; gap:10px; padding:12px; border-bottom:1px solid #eee; align-items: center; }
+.stock-badge{ padding:5px 10px; border-radius:8px; font-weight:bold; text-align:center; font-size: 13px; }
+.status-critical { background: #ff4757; color: white; animation: pulse 1.5s infinite; } 
+.status-normal { background: #2ed573; color: white; } 
+
+@keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+
+.cart-area { background: #f9f9f9; padding: 10px; border-radius: 15px; min-height: 200px; max-height: 400px; overflow-y: auto; }
+.cart-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #ddd; font-size: 14px; align-items: center;}
+.qty-btn { background: #eee; border: 1px solid #ccc; padding: 2px 8px; border-radius: 5px; cursor: pointer; }
+.total-display { font-size: 32px; font-weight: 800; text-align: center; margin: 15px 0; color: #2d3436; }
+.scanner-input{ width:100%; font-size:16px; padding:15px; border:2px solid #ff6b6b; border-radius:12px; text-align:center; background: #fffcfc;}
+.toast{ position:fixed; top:20px; right:20px; padding:15px; border-radius:10px; color:white; z-index:30000; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
+.history-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.history-table th { text-align:left; padding:8px; background:#f5f5f5; }
+.history-table td { padding:8px; border-bottom:1px solid #eee; }
+</style>
+</head>
+<body>
+
+<div id="adminNavDock">
+    <button class="nav-btn" onclick="scrollToId('searchInput')">🔍 Search</button>
+    <button class="nav-btn" onclick="scrollToId('adminSection')">📦 Manage</button>
+    <button class="nav-btn" onclick="scrollToId('historySection')">💰 History</button>
+    <button class="nav-btn" onclick="scrollToId('topHeader')" style="background:#6c757d;">⬆️ Top</button>
+</div>
+
+<div class="modal-overlay" id="loginModal">
+    <div class="login-box">
+        <h3>Admin Access</h3><br>
+        <input type="password" id="adminPassInput" placeholder="Password" style="text-align:center;"><br><br>
+        <button class="btn btn-success" style="width:100%;" onclick="checkAdminPassword()">LOGIN</button><br><br>
+        <button class="btn btn-danger" style="width:100%;" onclick="closeLoginModal()">CANCEL</button>
+    </div>
+</div>
+
+<div class="container">
+    <div class="main-panel">
+        <div class="header" id="topHeader">
+            <button class="admin-lock-btn" id="lockBtn" onclick="handleLockAction()">🔒 Admin Login</button>
+            <h2>7E-Baling Store</h2>
+            <div id="roleIndicator" style="font-size:11px;">Mode: Employee</div>
+        </div>
+
+        <div class="section-card" id="adminSection">
+            <h3>📦 Product Management</h3><br>
+            <div class="form-grid">
+                <input type="text" id="barcode" placeholder="Barcode">
+                <input type="text" id="name" placeholder="Item Name">
+                <input type="number" id="price" placeholder="Price">
+                <input type="number" id="stock" placeholder="Stock">
+            </div>
+            <div class="btn-grid">
+                <button class="btn btn-success" onclick="addProduct()">Save</button>
+                <button class="btn btn-warning" onclick="clearForm()">Clear</button>
+                <button class="btn btn-info" onclick="downloadBackup()">Backup</button>
+                <button class="btn btn-info" onclick="document.getElementById('uploadInput').click()">Upload</button>
+                <input type="file" id="uploadInput" style="display:none" onchange="uploadBackup(event)">
+            </div>
+        </div>
+
+        <div class="section-card" id="historySection">
+            <div style="display:flex; justify-content:space-between;">
+                <h3>💰 Sales History</h3>
+                <button class="btn btn-danger" style="padding:2px 10px; font-size:10px;" onclick="clearHistory()">Reset</button>
+            </div><br>
+            <div style="max-height: 250px; overflow-y: auto;">
+                <table class="history-table">
+                    <thead><tr><th>Time</th><th>Items</th><th>Total</th></tr></thead>
+                    <tbody id="historyBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="section-card">
+            <input type="text" id="searchInput" placeholder="🔍 Search product name or barcode..." oninput="searchProducts()">
+            <div id="productsContainer" style="margin-top:15px;"></div>
+        </div>
+    </div>
+
+    <div class="side-panel">
+        <div class="section-card" style="position: sticky; top: 15px;">
+            <h3 style="text-align: center;">🛒 CART</h3><br>
+            <div class="cart-area" id="cartItems">
+                <p style="color:#999; text-align:center; margin-top:50px;">Ready...</p>
+            </div>
+            <div class="total-display">₱<span id="cartTotal">0.00</span></div>
+            <input type="text" class="scanner-input" id="scannerInput" placeholder="SCAN HERE" onkeypress="handleScan(event)">
+            <div class="btn-grid" style="margin-top:15px; grid-template-columns: 1fr;">
+                <button class="btn btn-success" style="padding:15px;" onclick="checkout()">💰 CHECKOUT</button>
+                <button class="btn btn-danger" onclick="clearCart()">VOID</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let products = JSON.parse(localStorage.getItem('balingStoreProducts')) || [];
+let salesHistory = JSON.parse(localStorage.getItem('balingSalesHistory')) || [];
+let cart = [];
+let editingId = null;
+let isAdmin = false;
+const ADMIN_PASSWORD = "gereoshabu"; 
+
+function saveProducts(){ localStorage.setItem('balingStoreProducts', JSON.stringify(products)); }
+function saveHistory(){ localStorage.setItem('balingSalesHistory', JSON.stringify(salesHistory)); }
+
+function showMessage(msg, type='info'){
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.style.background = type==='success'?'#28a745':type==='error'?'#dc3545':'#3498db';
+    toast.innerText = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 2500);
+}
+
+function scrollToId(id) {
+    const el = document.getElementById(id);
+    if(el) { el.scrollIntoView({ behavior: 'smooth' }); if(id === 'searchInput') el.focus(); }
+}
+
+function handleLockAction() {
+    if(!isAdmin) { document.getElementById('loginModal').style.display = 'flex'; document.getElementById('adminPassInput').focus(); }
+    else { logoutAdmin(); }
+}
+
+function checkAdminPassword() {
+    if(document.getElementById('adminPassInput').value === ADMIN_PASSWORD) {
+        isAdmin = true;
+        document.getElementById('adminSection').style.display = 'block';
+        document.getElementById('historySection').style.display = 'block';
+        document.getElementById('adminNavDock').style.display = 'flex';
+        document.getElementById('lockBtn').innerText = "🔓 Logout";
+        document.getElementById('roleIndicator').innerText = "Mode: Admin";
+        closeLoginModal(); displayProducts(); renderHistory();
+    } else { showMessage("Wrong Password", "error"); }
+    document.getElementById('adminPassInput').value = '';
+}
+
+function logoutAdmin() {
+    isAdmin = false;
+    document.getElementById('adminSection').style.display = 'none';
+    document.getElementById('historySection').style.display = 'none';
+    document.getElementById('adminNavDock').style.display = 'none';
+    document.getElementById('lockBtn').innerText = "🔒 Admin Login";
+    document.getElementById('roleIndicator').innerText = "Mode: Employee";
+    displayProducts();
+}
+
+function closeLoginModal() { document.getElementById('loginModal').style.display = 'none'; }
+
+function addProduct(){
+    if(!isAdmin) return;
+    const barcode = document.getElementById('barcode').value.trim();
+    const name = document.getElementById('name').value.trim();
+    const price = parseFloat(document.getElementById('price').value);
+    const stock = parseInt(document.getElementById('stock').value);
+    if(!barcode || !name || isNaN(price) || isNaN(stock)) return showMessage('❌ Incomplete', 'error');
+
+    if(editingId !== null){
+        const idx = products.findIndex(p => p.id === editingId);
+        products[idx] = { id: editingId, barcode, name, price, stock };
+        editingId = null;
+    } else {
+        products.push({ id: Date.now(), barcode, name, price, stock });
+    }
+    saveProducts(); displayProducts(); clearForm(); showMessage('✅ Saved', 'success');
+}
+
+function editProduct(id){
+    const p = products.find(p => p.id === id);
+    editingId = p.id;
+    document.getElementById('barcode').value = p.barcode;
+    document.getElementById('name').value = p.name;
+    document.getElementById('price').value = p.price;
+    document.getElementById('stock').value = p.stock;
+    scrollToId('adminSection');
+}
+
+function deleteProduct(id){
+    if(confirm('Delete?')){ products = products.filter(p => p.id !== id); saveProducts(); displayProducts(); }
+}
+
+function clearForm(){ editingId = null; document.querySelectorAll('#adminSection input').forEach(i => i.value = ''); }
+
+function displayProducts(){
+    const container = document.getElementById('productsContainer');
+    container.innerHTML = '';
+    products.sort((a, b) => a.stock - b.stock);
+    products.forEach(p => {
+        const sClass = p.stock <= 2 ? 'status-critical' : 'status-normal';
+        container.innerHTML += `
+            <div class="product-item">
+                <div><strong>${p.name}</strong><br><small>${p.barcode}</small></div>
+                <div>₱${p.price.toFixed(2)}</div>
+                <div><span class="stock-badge ${sClass}">${p.stock}</span></div>
+                <div style="display: ${isAdmin ? 'block' : 'none'}">
+                    <button onclick="editProduct(${p.id})" style="color:orange; background:none; border:none; cursor:pointer; font-size:12px;">Edit</button> | 
+                    <button onclick="deleteProduct(${p.id})" style="color:red; background:none; border:none; cursor:pointer; font-size:12px;">Del</button>
+                </div>
+            </div>`;
+    });
+}
+
+function handleScan(e){
+    if(e.key === 'Enter'){
+        const product = products.find(p => p.barcode === e.target.value.trim());
+        if(product) {
+            if(product.stock > 0) {
+                // Check if current quantity in cart exceeds stock
+                const inCart = cart.find(i => i.id === product.id);
+                if(inCart && inCart.quantity >= product.stock) {
+                    showMessage(`❌ ERROR: Only ${product.stock} left!`, 'error');
+                } else {
+                    addToCart(product, 1);
+                }
+            } else {
+                showMessage(`❌ NO STOCK: ${product.name}`, 'error');
+            }
+        } else {
+            showMessage('Not Found', 'error');
+        }
+        e.target.value = '';
+    }
+}
+
+function addToCart(p, q){
+    const exists = cart.find(i => i.id === p.id);
+    if(exists) exists.quantity += q; else cart.push({...p, quantity: q});
+    renderCart();
+}
+
+function renderCart(){
+    const container = document.getElementById('cartItems');
+    let total = 0; container.innerHTML = '';
+    if(cart.length === 0) { container.innerHTML = '<p style="color:#999; text-align:center; margin-top:50px;">Ready...</p>'; document.getElementById('cartTotal').innerText = '0.00'; return; }
+    cart.forEach((item, index) => {
+        total += (item.price * item.quantity);
+        container.innerHTML += `
+            <div class="cart-item">
+                <span><button class="qty-btn" onclick="editCartQty(${index})">${item.quantity}x</button> ${item.name}</span>
+                <span>₱${(item.price * item.quantity).toFixed(2)} <button onclick="removeFromCart(${index})" style="color:red; border:none; background:none; cursor:pointer;">✕</button></span>
+            </div>`;
+    });
+    document.getElementById('cartTotal').innerText = total.toFixed(2);
+}
+
+function editCartQty(index) {
+    let newQty = prompt(`New quantity for ${cart[index].name}:`, cart[index].quantity);
+    if (newQty !== null) {
+        let q = parseInt(newQty);
+        let p = products.find(prod => prod.id === cart[index].id);
+        if (!isNaN(q) && q > 0 && q <= p.stock) {
+            cart[index].quantity = q; renderCart();
+        } else if (q > p.stock) {
+            showMessage(`❌ Error: Only ${p.stock} units available!`, "error");
+        } else if (q <= 0) {
+            removeFromCart(index);
+        }
+    }
+}
+
+function checkout(){
+    if(cart.length === 0) return;
+    
+    // Final verification of stock before deduction
+    for(let item of cart) {
+        const p = products.find(prod => prod.id === item.id);
+        if(p.stock < item.quantity) {
+            showMessage(`❌ CRITICAL: ${p.name} stock just dropped! Checkout cancelled.`, 'error');
+            return;
+        }
+    }
+
+    if(confirm('Proceed to checkout?')){
+        let total = 0; let itemsStr = "";
+        cart.forEach(item => {
+            const p = products.find(prod => prod.id === item.id);
+            if(p) p.stock -= item.quantity;
+            total += (item.price * item.quantity);
+            itemsStr += `${item.quantity}x ${item.name}, `;
+        });
+        salesHistory.unshift({ time: new Date().toLocaleString(), items: itemsStr.slice(0, -2), total: total.toFixed(2) });
+        saveProducts(); saveHistory(); displayProducts(); renderHistory(); clearCart();
+        showMessage('💰 Checkout Successful!', 'success');
+    }
+}
+
+function renderHistory(){
+    const body = document.getElementById('historyBody');
+    body.innerHTML = '';
+    salesHistory.forEach(s => { body.innerHTML += `<tr><td>${s.time}</td><td>${s.items}</td><td>₱${s.total}</td></tr>`; });
+}
+
+function clearHistory(){ if(confirm('Reset all sales?')) { salesHistory = []; saveHistory(); renderHistory(); } }
+function removeFromCart(i){ cart.splice(i,1); renderCart(); }
+function clearCart(){ cart = []; renderCart(); }
+
+function searchProducts(){
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    const items = document.getElementsByClassName('product-item');
+    Array.from(items).forEach(it => { it.style.display = it.innerText.toLowerCase().includes(q) ? 'grid' : 'none'; });
+}
+
+function downloadBackup() {
+    const blob = new Blob([JSON.stringify(products)], { type: "application/json" });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob); link.download = `7E_Backup_Data.json`; link.click();
+}
+
+function uploadBackup(event) {
+    const reader = new FileReader();
+    reader.onload = function(e) { products = JSON.parse(e.target.result); saveProducts(); displayProducts(); showMessage("System Data Restored!"); };
+    reader.readAsText(event.target.files[0]);
+}
+
+document.addEventListener('click', (e) => {
+    if(document.getElementById('loginModal').style.display === 'flex') return;
+    if(e.target.tagName !== 'INPUT' && e.target.tagName !== 'BUTTON' && !e.target.classList.contains('qty-btn')) {
+        document.getElementById('scannerInput').focus();
+    }
+});
+
+displayProducts(); renderHistory();
+</script>
+</body>
+</html>
