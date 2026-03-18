@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>7E-Baling Store POS</title>
 <style>
-/* OFFLINE SAFE FONTS */
+/* KEEPING YOUR EXACT STYLING */
 *{
     margin:0; padding:0; box-sizing:border-box; scroll-behavior: smooth;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -32,15 +32,19 @@ body{
 
 .section-card{ background:white; padding:20px; border-radius:20px; margin-bottom:20px; border: 1px solid #eee; }
 
-/* ADMIN NAV DOCK */
+/* REVENUE SUMMARY STYLES */
+.summary-container { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+.revenue-summary { color: white; padding: 15px; border-radius: 15px; text-align: center; }
+.daily-bg { background: #28a745; }
+.monthly-bg { background: #007bff; }
+.revenue-summary h2 { font-size: 20px; margin: 5px 0; }
+
 #adminNavDock {
     position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: white; padding: 10px 25px; border-radius: 50px; display: none; gap: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.3); z-index: 10000;
 }
 .nav-btn { background:#ff6b6b; color:white; border:none; padding:8px 15px; border-radius:20px; cursor:pointer; font-weight:bold; font-size:12px; }
-
 .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 20000; justify-content: center; align-items: center; }
 .login-box { background: white; padding: 30px; border-radius: 20px; text-align: center; width: 300px; }
-
 #adminSection, #historySection { display: none; }
 .form-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:15px; }
 input{ width:100%; padding:12px; border:1px solid #ddd; border-radius:12px; outline:none; font-size: 14px;}
@@ -50,21 +54,18 @@ input{ width:100%; padding:12px; border:1px solid #ddd; border-radius:12px; outl
 .btn-warning{ background:#ffc107; color:white; }
 .btn-danger{ background:#dc3545; color:white; }
 .btn-info { background:#17a2b8; color:white; }
-
 .product-item{ display:grid; grid-template-columns:2fr 1fr 1fr 100px; gap:10px; padding:12px; border-bottom:1px solid #eee; align-items: center; }
 .stock-badge{ padding:5px 10px; border-radius:8px; font-weight:bold; text-align:center; font-size: 13px; }
 .status-critical { background: #ff4757; color: white; animation: pulse 1.5s infinite; } 
 .status-normal { background: #2ed573; color: white; } 
-
 @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
-
 .cart-area { background: #f9f9f9; padding: 10px; border-radius: 15px; min-height: 200px; max-height: 400px; overflow-y: auto; }
 .cart-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed #ddd; font-size: 14px; align-items: center;}
 .qty-btn { background: #eee; border: 1px solid #ccc; padding: 2px 8px; border-radius: 5px; cursor: pointer; }
 .total-display { font-size: 32px; font-weight: 800; text-align: center; margin: 15px 0; color: #2d3436; }
 .scanner-input{ width:100%; font-size:16px; padding:15px; border:2px solid #ff6b6b; border-radius:12px; text-align:center; background: #fffcfc;}
 .toast{ position:fixed; top:20px; right:20px; padding:15px; border-radius:10px; color:white; z-index:30000; box-shadow: 0 5px 15px rgba(0,0,0,0.2); }
-.history-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.history-table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .history-table th { text-align:left; padding:8px; background:#f5f5f5; }
 .history-table td { padding:8px; border-bottom:1px solid #eee; }
 </style>
@@ -113,13 +114,26 @@ input{ width:100%; padding:12px; border:1px solid #ddd; border-radius:12px; outl
         </div>
 
         <div class="section-card" id="historySection">
-            <div style="display:flex; justify-content:space-between;">
+            <div class="summary-container">
+                <div class="revenue-summary daily-bg">
+                    <small>TODAY'S TOTAL</small>
+                    <h2 id="grandTotalDisplay">₱0.00</h2>
+                </div>
+                <div class="revenue-summary monthly-bg">
+                    <small id="monthLabel">THIS MONTH</small>
+                    <h2 id="monthlyTotalDisplay">₱0.00</h2>
+                </div>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center;">
                 <h3>💰 Sales History</h3>
-                <button class="btn btn-danger" style="padding:2px 10px; font-size:10px;" onclick="clearHistory()">Reset</button>
+                <div>
+                    <button class="btn btn-info" style="padding:5px 10px; font-size:10px;" onclick="exportHistory()">Excel/CSV</button>
+                    <button class="btn btn-danger" style="padding:5px 10px; font-size:10px;" onclick="clearHistory()">Reset Day</button>
+                </div>
             </div><br>
             <div style="max-height: 250px; overflow-y: auto;">
                 <table class="history-table">
-                    <thead><tr><th>Time</th><th>Items</th><th>Total</th></tr></thead>
+                    <thead><tr><th>Date/Time</th><th>Items Sold</th><th>Total</th></tr></thead>
                     <tbody id="historyBody"></tbody>
                 </table>
             </div>
@@ -153,7 +167,8 @@ let salesHistory = JSON.parse(localStorage.getItem('balingSalesHistory')) || [];
 let cart = [];
 let editingId = null;
 let isAdmin = false;
-const ADMIN_PASSWORD = "gereoshabu"; 
+const ADMIN_PASSWORD = "geroeshabu"; 
+const beep = new Audio('https://assets.mixkit.co/active_storage/sfx/701/701-preview.mp3');
 
 function saveProducts(){ localStorage.setItem('balingStoreProducts', JSON.stringify(products)); }
 function saveHistory(){ localStorage.setItem('balingSalesHistory', JSON.stringify(salesHistory)); }
@@ -260,11 +275,11 @@ function handleScan(e){
         const product = products.find(p => p.barcode === e.target.value.trim());
         if(product) {
             if(product.stock > 0) {
-                // Check if current quantity in cart exceeds stock
                 const inCart = cart.find(i => i.id === product.id);
                 if(inCart && inCart.quantity >= product.stock) {
                     showMessage(`❌ ERROR: Only ${product.stock} left!`, 'error');
                 } else {
+                    beep.play();
                     addToCart(product, 1);
                 }
             } else {
@@ -315,16 +330,13 @@ function editCartQty(index) {
 
 function checkout(){
     if(cart.length === 0) return;
-    
-    // Final verification of stock before deduction
     for(let item of cart) {
         const p = products.find(prod => prod.id === item.id);
         if(p.stock < item.quantity) {
-            showMessage(`❌ CRITICAL: ${p.name} stock just dropped! Checkout cancelled.`, 'error');
+            showMessage(`❌ CRITICAL: ${p.name} stock dropped!`, 'error');
             return;
         }
     }
-
     if(confirm('Proceed to checkout?')){
         let total = 0; let itemsStr = "";
         cart.forEach(item => {
@@ -333,7 +345,14 @@ function checkout(){
             total += (item.price * item.quantity);
             itemsStr += `${item.quantity}x ${item.name}, `;
         });
-        salesHistory.unshift({ time: new Date().toLocaleString(), items: itemsStr.slice(0, -2), total: total.toFixed(2) });
+        const now = new Date();
+        salesHistory.unshift({ 
+            date: now.toLocaleDateString(),
+            time: now.toLocaleTimeString(), 
+            items: itemsStr.slice(0, -2), 
+            total: total.toFixed(2),
+            timestamp: now.getTime()
+        });
         saveProducts(); saveHistory(); displayProducts(); renderHistory(); clearCart();
         showMessage('💰 Checkout Successful!', 'success');
     }
@@ -342,10 +361,43 @@ function checkout(){
 function renderHistory(){
     const body = document.getElementById('historyBody');
     body.innerHTML = '';
-    salesHistory.forEach(s => { body.innerHTML += `<tr><td>${s.time}</td><td>${s.items}</td><td>₱${s.total}</td></tr>`; });
+    let dailyTotal = 0;
+    let monthlyTotal = 0;
+    
+    const todayStr = new Date().toLocaleDateString();
+    const currentMonth = new Date().getMonth();
+    const currentYear = new Date().getFullYear();
+
+    salesHistory.forEach(s => { 
+        body.innerHTML += `<tr><td>${s.date} ${s.time}</td><td>${s.items}</td><td>₱${s.total}</td></tr>`;
+        
+        let saleDate = new Date(s.timestamp);
+        // Calculate Today's Total
+        if(s.date === todayStr) dailyTotal += parseFloat(s.total);
+        // Calculate Monthly Total
+        if(saleDate.getMonth() === currentMonth && saleDate.getFullYear() === currentYear) monthlyTotal += parseFloat(s.total);
+    });
+
+    document.getElementById('grandTotalDisplay').innerText = "₱" + dailyTotal.toFixed(2);
+    document.getElementById('monthlyTotalDisplay').innerText = "₱" + monthlyTotal.toFixed(2);
+    const months = ["JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST", "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"];
+    document.getElementById('monthLabel').innerText = months[currentMonth] + " TOTAL";
 }
 
-function clearHistory(){ if(confirm('Reset all sales?')) { salesHistory = []; saveHistory(); renderHistory(); } }
+function exportHistory() {
+    let csv = "Date,Time,Items,Total\n";
+    salesHistory.forEach(s => {
+        csv += `"${s.date}","${s.time}","${s.items}",${s.total}\n`;
+    });
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `7E_Sales_Report_${new Date().toLocaleDateString()}.csv`;
+    a.click();
+}
+
+function clearHistory(){ if(confirm('Reset all sales history?')) { salesHistory = []; saveHistory(); renderHistory(); } }
 function removeFromCart(i){ cart.splice(i,1); renderCart(); }
 function clearCart(){ cart = []; renderCart(); }
 
